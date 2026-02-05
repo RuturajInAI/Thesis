@@ -1,0 +1,9 @@
+Weld Index,Part A,Part B,Weld Type,Weld Side,Weld Size,Weld Length,Weld Reference,Source,Confidence,Status,Notes
+1,Sheet A,Sheet B,Fillet,,,,,Sample,,To review,
+2,Sheet A,Sheet C,Double-Sided Fillet,,,,,Sample,,To review,
+3,Sheet A,Sheet D,Fillet,,,,,Sample,,To review,
+4,Sheet A,Sheet E,Fillet,,,,,Sample,,To review,
+5,Sheet B,Sheet E,Fillet,,,,,Sample,,To review,
+6,Sheet B,Sheet D,Fillet,,,,,Sample,,To review,
+7,Sheet E,Sheet C,Fillet,,,,,Sample,,To review,
+8,Sheet C,Sheet D,Fillet,,,,,Sample,,To review,
