@@ -1,0 +1,6 @@
+# For local development only
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
