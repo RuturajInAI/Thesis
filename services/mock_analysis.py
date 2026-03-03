@@ -1,11 +1,16 @@
 import pandas as pd
 import numpy as np
 
+
 def mock_analyze_joints(mode: str, n: int = 10) -> pd.DataFrame:
     rng = np.random.default_rng(10)
 
     parts = ["Sheet A", "Sheet B", "Sheet C", "Sheet D", "Sheet E"]
     weld_types = ["Fillet", "Double-Sided Fillet", "Butt"]
+
+    weld_side = ["single-sided", "double-sided"]
+    weld_size = ["a3", "a4", "a6", None]
+    weld_length = [None, None, None, 120, 180, 240]
 
     rows = []
     for i in range(n):
@@ -21,6 +26,13 @@ def mock_analyze_joints(mode: str, n: int = 10) -> pd.DataFrame:
             y2 = min(650, y1 + h)
 
             rows.append({
+                "Preview": "⟂",
+                "Part_Index": int(rng.integers(1, 4)),
+                "Weld_Type_2D": rng.choice(["Bevel_Groove", "Fillet"]),
+                "Weld_Side": rng.choice(weld_side),
+                "Weld_Size": rng.choice(weld_size),
+                "Weld_Length": rng.choice(weld_length),
+
                 "Weld_Index": i + 1,
                 "Part_A": a,
                 "Part_B": b,

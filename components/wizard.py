@@ -53,6 +53,46 @@ def _page_header(title: str, hint: str):
     st.write("")
 
 
+def _render_3d_weld_blocks(df):
+    if df is None or df.empty:
+        st.info("No 3D weld connections available.")
+        return
+
+    required = {"Part_A", "Part_B"}
+    if not required.issubset(set(df.columns)):
+        st.info("3D data does not contain Part A and Part B.")
+        return
+
+    groups = {}
+    for _, r in df[["Part_A", "Part_B"]].dropna().iterrows():
+        a = str(r["Part_A"]).strip()
+        b = str(r["Part_B"]).strip()
+        if a == "" or b == "":
+            continue
+        groups.setdefault(a, set()).add(b)
+
+    if len(groups) == 0:
+        st.info("No 3D weld connections available.")
+        return
+
+    for part in sorted(groups.keys()):
+        weld_list = sorted(list(groups.get(part, [])))
+
+        html = '<div class="weld3d-group">'
+        html += f'<div class="weld3d-header">{part}</div>'
+
+        for idx, other in enumerate(weld_list):
+            is_bad = (idx == 1)
+            chip_class = "weld3d-chip bad" if is_bad else "weld3d-chip"
+            html += '<div class="weld3d-row">'
+            html += f'<div class="{chip_class}">Weld with {other}</div>'
+            html += '<div class="weld3d-check">✓</div>'
+            html += "</div>"
+
+        html += "</div>"
+        st.markdown(html, unsafe_allow_html=True)
+
+
 def _screen_upload():
     _page_header(
         "Upload drawing",
@@ -110,10 +150,41 @@ def _screen_workflow_preview():
     nav_buttons(True, _go_back, _go_next)
 
 
+def _analysis_table_2d(df):
+    cols = ["Preview", "Part_Index", "Weld_Type_2D", "Weld_Side", "Weld_Size", "Weld_Length"]
+    existing = [c for c in cols if c in df.columns]
+    df_view = df[existing].copy()
+
+    df_view = df_view.rename(
+        columns={
+            "Preview": "Preview",
+            "Part_Index": "Part index",
+            "Weld_Type_2D": "Weld type",
+            "Weld_Side": "Weld side",
+            "Weld_Size": "Weld size",
+            "Weld_Length": "Weld length",
+        }
+    )
+
+    st.dataframe(df_view, use_container_width=True, height=TABLE_HEIGHT)
+
+
+def _analysis_table_3d(df):
+    df_view = df[["Weld_Index", "Part_A", "Part_B"]].copy()
+    df_view = df_view.rename(
+        columns={
+            "Weld_Index": "Weld Index",
+            "Part_A": "Part A",
+            "Part_B": "Part B",
+        }
+    )
+    st.dataframe(df_view, use_container_width=True, height=TABLE_HEIGHT)
+
+
 def _screen_analysis():
     _page_header(
         "Analyze (mock)",
-        "Click Analyze to generate the weld list. Table height is fixed so the page stays stable."
+        "This page has two sections. Use the tabs below."
     )
 
     if st.session_state.uploaded_name is None:
@@ -121,19 +192,37 @@ def _screen_analysis():
         nav_buttons(False, _go_back, _go_next)
         return
 
-    if st.button("Analyze", type="primary", use_container_width=False):
-        st.session_state.df = mock_analyze_joints(st.session_state.mode)
-        st.session_state.analysis_done = True
-        st.session_state.corrections_saved = False
-        st.markdown('<div class="weld-accent">Analysis completed</div>', unsafe_allow_html=True)
+    tab2d, tab3d = st.tabs(["2D", "3D"])
 
-    if st.session_state.analysis_done and st.session_state.df is not None:
-        df = st.session_state.df
-        st.dataframe(
-            df[["Weld_Index", "Part_A", "Part_B", "Weld_Type"]],
-            use_container_width=True,
-            height=TABLE_HEIGHT
-        )
+    with tab2d:
+        st.markdown('<div class="weld-accent">2D analysis</div>', unsafe_allow_html=True)
+        st.write("Click Analyze to generate the weld list for 2D.")
+
+        if st.button("Analyze 2D", type="primary", use_container_width=False, key="analyze_2d"):
+            st.session_state.df = mock_analyze_joints("2D")
+            st.session_state.mode = "2D"
+            st.session_state.analysis_done = True
+            st.session_state.corrections_saved = False
+            st.markdown('<div class="weld-accent">2D analysis completed</div>', unsafe_allow_html=True)
+
+        if st.session_state.analysis_done and st.session_state.df is not None and st.session_state.mode == "2D":
+            _analysis_table_2d(st.session_state.df)
+
+    with tab3d:
+        st.markdown('<div class="weld-accent">3D analysis</div>', unsafe_allow_html=True)
+        st.write("Click Analyze to generate the weld connections list for 3D.")
+
+        if st.button("Analyze 3D", type="primary", use_container_width=False, key="analyze_3d"):
+            st.session_state.df = mock_analyze_joints("3D")
+            st.session_state.mode = "3D"
+            st.session_state.analysis_done = True
+            st.session_state.corrections_saved = False
+            st.markdown('<div class="weld-accent">3D analysis completed</div>', unsafe_allow_html=True)
+
+        if st.session_state.analysis_done and st.session_state.df is not None and st.session_state.mode == "3D":
+            _analysis_table_3d(st.session_state.df)
+            st.write("")
+            _render_3d_weld_blocks(st.session_state.df)
 
     nav_buttons(bool(st.session_state.analysis_done), _go_back, _go_next)
 
@@ -141,7 +230,7 @@ def _screen_analysis():
 def _screen_visualize():
     _page_header(
         "Visualize welds",
-        "2D overlay supports zoom in and zoom out. 3D plot supports rotate and zoom."
+        "2D overlay supports zoom."
     )
 
     df = st.session_state.df
@@ -150,22 +239,24 @@ def _screen_visualize():
         nav_buttons(False, _go_back, _go_next)
         return
 
-    if st.session_state.mode == "2D":
-        base_img = load_image_from_bytes(st.session_state.uploaded_bytes, st.session_state.uploaded_name)
-        overlay = draw_2d_welds_overlay(base_img, df)
-        fig = pil_to_plotly_figure(overlay, height=VIEW_HEIGHT)
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CFG)
-    else:
-        fig = render_3d_welds_plot(df, height=VIEW_HEIGHT)
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CFG)
+    if st.session_state.uploaded_bytes is None or st.session_state.uploaded_name is None:
+        st.warning("No uploaded drawing found. Go back and upload the drawing.")
+        nav_buttons(False, _go_back, _go_next)
+        return
+
+    base_img = load_image_from_bytes(st.session_state.uploaded_bytes, st.session_state.uploaded_name)
+    overlay = draw_2d_welds_overlay(base_img, df)
+    fig = pil_to_plotly_figure(overlay, height=VIEW_HEIGHT)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CFG)
 
     nav_buttons(True, _go_back, _go_next)
+
 
 
 def _screen_correct():
     _page_header(
         "Correct weld list",
-        "Edit directly in the table, then click Save changes. Table height is fixed."
+        "Edit directly in the table, then click Save changes."
     )
 
     df = st.session_state.df
@@ -175,9 +266,10 @@ def _screen_correct():
         return
 
     visible_cols = ["Weld_Index", "Part_A", "Part_B", "Weld_Type", "Status"]
+    existing_cols = [c for c in visible_cols if c in df.columns]
 
     editable = st.data_editor(
-        df[visible_cols],
+        df[existing_cols],
         use_container_width=True,
         num_rows="dynamic",
         height=TABLE_HEIGHT,
@@ -188,7 +280,7 @@ def _screen_correct():
     with c1:
         if st.button("Save changes", type="primary", use_container_width=True):
             df_new = df.copy()
-            for col in visible_cols:
+            for col in existing_cols:
                 df_new[col] = editable[col]
             st.session_state.df = df_new
             st.session_state.corrections_saved = True
@@ -204,7 +296,7 @@ def _screen_correct():
 def _screen_export():
     _page_header(
         "Export",
-        "Download the corrected weld list. Preview table height is fixed."
+        "Download the corrected weld list."
     )
 
     df = st.session_state.df
@@ -213,7 +305,8 @@ def _screen_export():
         nav_buttons(False, _go_back, _go_next)
         return
 
-    df_out = df[df["Status"] != "Delete"][["Weld_Index", "Part_A", "Part_B", "Weld_Type"]].copy()
+    keep_cols = [c for c in ["Weld_Index", "Part_A", "Part_B", "Weld_Type"] if c in df.columns]
+    df_out = df[df.get("Status", "OK") != "Delete"][keep_cols].copy()
 
     st.dataframe(df_out, use_container_width=True, height=TABLE_HEIGHT)
 
